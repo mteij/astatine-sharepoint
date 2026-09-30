@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace App\Controller\Component;
@@ -91,7 +90,7 @@ class EntraAuthComponent extends Component
     }
 
     /**
-     * @return array{name: string, email: string, catalog: ChannelCatalog}|null Null when signed out or the token expired.
+     * @return array{name: string, email: string, catalog: \App\Service\ChannelCatalog}|null Null when signed out or the token expired.
      */
     public function user(): ?array
     {

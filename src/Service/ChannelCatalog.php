@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace App\Service;
@@ -11,7 +10,9 @@ use Cake\Utility\Text;
  */
 final class ChannelCatalog
 {
-    /** @var array<string, Channel> */
+    /**
+     * @var array<string, \App\Service\Channel>
+     */
     private readonly array $bySlug;
 
     /**
@@ -32,7 +33,7 @@ final class ChannelCatalog
     }
 
     /**
-     * @return list<Channel>
+     * @return list<\App\Service\Channel>
      */
     public function all(): array
     {
@@ -46,6 +47,6 @@ final class ChannelCatalog
 
     public function spansMultipleTeams(): bool
     {
-        return count(array_unique(array_map(static fn (Channel $c): string => $c->teamId, $this->bySlug))) > 1;
+        return count(array_unique(array_map(static fn(Channel $c): string => $c->teamId, $this->bySlug))) > 1;
     }
 }

@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace App\Service;
@@ -37,8 +36,7 @@ final class TeamsService
             }
         }
 
-        usort($channels, static fn (array $a, array $b): int =>
-            [strtolower($a['teamName']), strtolower($a['name'])] <=> [strtolower($b['teamName']), strtolower($b['name'])]);
+        usort($channels, static fn(array $a, array $b): int => [strtolower($a['teamName']), strtolower($a['name'])] <=> [strtolower($b['teamName']), strtolower($b['name'])]);
 
         return $channels;
     }

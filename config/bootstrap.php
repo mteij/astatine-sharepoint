@@ -45,6 +45,7 @@ use Cake\Mailer\TransportFactory;
 use Cake\Routing\Router;
 use Cake\Utility\Security;
 use Detection\MobileDetect;
+use josegonzalez\Dotenv\Loader;
 use function Cake\Core\env;
 
 /*
@@ -67,7 +68,7 @@ require CAKE . 'functions.php';
  * for more information for recommended practices.
 */
 if (!env('ENTRA_CLIENT_ID') && file_exists(CONFIG . '.env')) {
-    $dotenv = new \josegonzalez\Dotenv\Loader([CONFIG . '.env']);
+    $dotenv = new Loader([CONFIG . '.env']);
     $dotenv->parse()
         ->putenv()
         ->toEnv()

@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace App\Controller;
@@ -176,7 +175,7 @@ class CommitteesController extends AppController
             // The channel's folder never changes, so it is looked up once per session.
             $folder = $this->EntraAuth->remember(
                 "files:{$channel->teamId}:{$channel->channelId}",
-                fn (): array => (new TeamsService($graph))->filesFolder($channel->teamId, $channel->channelId),
+                fn(): array => (new TeamsService($graph))->filesFolder($channel->teamId, $channel->channelId),
             );
             $items = $drive->list($folder['driveId'], $folder['itemId'], $path);
             $folderUrl = $folder['webUrl'] !== '' ? $path->urlUnder($folder['webUrl']) : null;

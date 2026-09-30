@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace App\Test\TestCase\Service;
@@ -44,7 +43,7 @@ class GraphServicesTest extends TestCase
         );
         $path = parse_url($url, PHP_URL_PATH);
         $this->http->addMockResponse('GET', $url . '/*', $response, [
-            'match' => static fn ($request): bool => rawurldecode($request->getUri()->getPath()) === rawurldecode($path)
+            'match' => static fn($request): bool => rawurldecode($request->getUri()->getPath()) === rawurldecode($path)
                 && ($query === null || $request->getUri()->getQuery() === $query),
         ]);
     }
@@ -181,7 +180,7 @@ class GraphServicesTest extends TestCase
 
         $items = (new DriveService($this->graph()))->list('d1', 'f1', FolderPath::root());
 
-        $this->assertSame(['alpha', 'Zeta', 'a.pdf', 'b.pdf'], array_map(fn ($i) => $i->name, $items));
+        $this->assertSame(['alpha', 'Zeta', 'a.pdf', 'b.pdf'], array_map(fn($i) => $i->name, $items));
         $this->assertTrue($items[0]->isFolder);
         $this->assertSame('2026-01-02', $items[3]->modified->format('Y-m-d'));
     }

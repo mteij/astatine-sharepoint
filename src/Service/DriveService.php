@@ -1,5 +1,4 @@
 <?php
-
 declare(strict_types=1);
 
 namespace App\Service;
@@ -19,7 +18,7 @@ final class DriveService
     /**
      * Folders first, then files, each sorted by name.
      *
-     * @return list<DriveItem>
+     * @return list<\App\Service\DriveItem>
      */
     public function list(string $driveId, string $baseItemId, FolderPath $path): array
     {
@@ -29,8 +28,7 @@ final class DriveService
         );
 
         $items = array_map(DriveItem::fromGraph(...), $raw);
-        usort($items, static fn (DriveItem $a, DriveItem $b): int =>
-            [!$a->isFolder, strtolower($a->name)] <=> [!$b->isFolder, strtolower($b->name)]);
+        usort($items, static fn(DriveItem $a, DriveItem $b): int => [!$a->isFolder, strtolower($a->name)] <=> [!$b->isFolder, strtolower($b->name)]);
 
         return $items;
     }

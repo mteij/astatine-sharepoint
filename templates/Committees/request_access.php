@@ -23,4 +23,16 @@ $this->assign('title', 'Request access');
             'required' => true,
             'maxlength' => $maxCommittee,
         ]) ?>
-        <?= $this->Form->control('
+        <?= $this->Form->control('note', [
+            'type' => 'textarea',
+            'label' => 'Note (optional)',
+            'value' => $note,
+            'rows' => 4,
+            'maxlength' => $maxNote,
+        ]) ?>
+        <div>
+            <button class="btn primary" type="submit">Send request</button>
+            <a class="muted" href="<?= h($fallbackUrl) ?>">or email the board</a>
+        </div>
+    <?= $this->Form->end() ?>
+</div>
