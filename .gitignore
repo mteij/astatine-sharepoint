@@ -50,3 +50,6 @@ nbproject/*
 # yarn
 yarn-debug.log
 yarn-error.log
+
+# Docker Compose secrets
+/.env.docker

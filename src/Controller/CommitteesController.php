@@ -5,7 +5,9 @@ namespace App\Controller;
 
 use App\Service\AccessRequestException;
 use App\Service\AccessRequestNotifier;
+use App\Service\Channel;
 use App\Service\DriveService;
+use App\Service\EntraAuth;
 use App\Service\FolderPath;
 use App\Service\GraphClient;
 use App\Service\GraphException;
@@ -16,6 +18,10 @@ use Cake\Http\Exception\NotFoundException;
 use Cake\Http\Response;
 use Cake\Log\Log;
 use InvalidArgumentException;
+use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
+use Psr\Http\Client\ClientExceptionInterface;
+use RuntimeException;
+use UnexpectedValueException;
 
 class CommitteesController extends AppController
 {
@@ -25,8 +31,9 @@ class CommitteesController extends AppController
     private const PUBLIC_ACTIONS = ['index', 'login', 'callback', 'logout'];
 
     private const REQUEST_COOLDOWN_SECONDS = 3600;
-    private const MAX_COMMITTEE_LENGTH = 100;
+    private const MAX_ID_LENGTH = 200;
     private const MAX_NOTE_LENGTH = 500;
+    public const REQUESTABLE_CACHE_KEY = 'requestable-channels';
 
     public function beforeFilter(EventInterface $event): void
     {
@@ -60,29 +67,67 @@ class CommitteesController extends AppController
         }
         $this->request->allowMethod(['get', 'post']);
 
-        $committee = '';
+        $options = $this->requestableChannels();
+        $selected = '';
         $note = '';
         if ($this->request->is('post')) {
-            $committee = $this->cleanText($this->request->getData('committee'), self::MAX_COMMITTEE_LENGTH);
+            $selected = $this->cleanText($this->request->getData('committee'), self::MAX_ID_LENGTH);
             $note = $this->cleanText($this->request->getData('note'), self::MAX_NOTE_LENGTH);
+            $channel = $options[$selected] ?? null;
 
-            if ($committee === '') {
-                $this->Flash->error(__('Please enter the committee you want access to.'));
-            } elseif ($this->recentlyRequested($committee)) {
+            if ($channel === null) {
+                $this->Flash->error(__('Please select a committee from the list.'));
+            } elseif ($this->recentlyRequested($selected)) {
                 $this->Flash->error(__('You already requested access to this committee. Please wait a while before trying again.'));
-            } elseif ($this->deliver($webhookUrl, $committee, $note)) {
+            } elseif ($this->deliver($webhookUrl, $selected, $channel, $note)) {
                 $this->Flash->success(__('Request sent to the board.'));
 
                 return $this->redirect('/');
             }
         }
 
-        $this->set(compact('committee', 'note'));
-        $this->set('maxCommittee', self::MAX_COMMITTEE_LENGTH);
+        $this->set('committees', array_map(static fn (array $c): string => $c['name'], $options));
+        $this->set(compact('selected', 'note'));
         $this->set('maxNote', self::MAX_NOTE_LENGTH);
-        $this->set('fallbackUrl', Configure::read('Portal.requestAccessUrl'));
 
         return null;
+    }
+
+    /**
+     * Channels that exist in the configured teams but that the user is not in yet,
+     * keyed by channel id. Listed with an app-only token and kept in the session.
+     *
+     * @return array<string, array{channelId: string, name: string}>
+     */
+    private function requestableChannels(): array
+    {
+        $teamIds = (array)Configure::read('Portal.requestAccessTeamIds');
+        if ($teamIds === []) {
+            return [];
+        }
+
+        try {
+            $all = $this->EntraAuth->remember(
+                self::REQUESTABLE_CACHE_KEY,
+                static fn (): array => (new TeamsService(new GraphClient((new EntraAuth())->appAccessToken())))
+                    ->channelsOfTeams($teamIds),
+            );
+        } catch (GraphException | IdentityProviderException | ClientExceptionInterface | UnexpectedValueException | RuntimeException $e) {
+            Log::error('Could not list requestable committees: ' . $e->getMessage());
+            $this->Flash->error(__('The list of committees could not be loaded. Please try again later.'));
+
+            return [];
+        }
+
+        $mine = array_map(static fn (Channel $c): string => $c->channelId, $this->EntraAuth->user()['catalog']->all());
+        $options = [];
+        foreach ($all as $channel) {
+            if (!in_array($channel['channelId'], $mine, true)) {
+                $options[$channel['channelId']] = $channel;
+            }
+        }
+
+        return $options;
     }
 
     private function webhookUrl(): string
@@ -103,30 +148,33 @@ class CommitteesController extends AppController
         return mb_substr($value, 0, $max);
     }
 
-    private function recentlyRequested(string $committee): bool
+    private function recentlyRequested(string $channelId): bool
     {
-        $last = $this->request->getSession()->read($this->cooldownKey($committee));
+        $last = $this->request->getSession()->read($this->cooldownKey($channelId));
 
         return is_int($last) && time() - $last < self::REQUEST_COOLDOWN_SECONDS;
     }
 
-    private function cooldownKey(string $committee): string
+    private function cooldownKey(string $channelId): string
     {
-        return 'AccessRequests.' . md5(mb_strtolower($committee));
+        return 'AccessRequests.' . md5($channelId);
     }
 
-    private function deliver(string $webhookUrl, string $committee, string $note): bool
+    /**
+     * @param array{channelId: string, name: string} $channel
+     */
+    private function deliver(string $webhookUrl, string $channelId, array $channel, string $note): bool
     {
         $user = $this->EntraAuth->user();
         try {
-            (new AccessRequestNotifier($webhookUrl))->send($user['name'], $user['email'], $committee, $note);
+            (new AccessRequestNotifier($webhookUrl))->send($user['name'], $user['email'], $channel['name'], $note);
         } catch (AccessRequestException $e) {
             Log::error('Access request not delivered: ' . $e->getMessage());
             $this->Flash->error(__('Your request could not be sent. Please email the board instead.'));
 
             return false;
         }
-        $this->request->getSession()->write($this->cooldownKey($committee), time());
+        $this->request->getSession()->write($this->cooldownKey($channelId), time());
 
         return true;
     }

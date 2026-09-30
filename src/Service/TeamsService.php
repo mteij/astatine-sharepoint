@@ -42,6 +42,32 @@ final class TeamsService
     }
 
     /**
+     * Channels of the given teams regardless of membership; meant for an
+     * app-only token. Unreadable teams are skipped.
+     *
+     * @param list<string> $teamIds
+     * @return list<array{teamId: string, teamName: string, channelId: string, name: string}>
+     */
+    public function channelsOfTeams(array $teamIds): array
+    {
+        $channels = [];
+        foreach ($teamIds as $teamId) {
+            try {
+                $channels = [...$channels, ...$this->teamChannels($teamId, '')];
+            } catch (GraphException $e) {
+                if ($e->isUnauthorized()) {
+                    throw $e;
+                }
+                Log::warning("Team {$teamId} skipped: " . $e->getMessage());
+            }
+        }
+
+        usort($channels, static fn (array $a, array $b): int => strtolower($a['name']) <=> strtolower($b['name']));
+
+        return $channels;
+    }
+
+    /**
      * Drive and folder holding the channel's files.
      *
      * @return array{driveId: string, itemId: string, webUrl: string}

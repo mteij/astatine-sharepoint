@@ -16,6 +16,8 @@ final class EntraAuth
 {
     public const SCOPES = ['openid', 'profile', 'User.Read', 'Team.ReadBasic.All', 'Channel.ReadBasic.All', 'Files.Read.All'];
 
+    private const APP_SCOPE = 'https://graph.microsoft.com/.default';
+
     private readonly AbstractProvider $provider;
 
     public function __construct(?AbstractProvider $provider = null)
@@ -42,6 +44,14 @@ final class EntraAuth
         $this->provider->setPkceCode($pkceVerifier);
 
         return $this->provider->getAccessToken('authorization_code', ['code' => $code]);
+    }
+
+    /**
+     * App-only Graph token (client credentials); needs application permissions with admin consent.
+     */
+    public function appAccessToken(): string
+    {
+        return $this->provider->getAccessToken('client_credentials', ['scope' => self::APP_SCOPE])->getToken();
     }
 
     /**

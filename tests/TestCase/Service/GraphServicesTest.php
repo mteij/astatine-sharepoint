@@ -123,6 +123,22 @@ class GraphServicesTest extends TestCase
         $this->assertSame('Astatine', $channels[0]['teamName']);
     }
 
+    public function testChannelsOfTeamsListsEveryChannelExceptGeneral(): void
+    {
+        $this->mock(self::BASE . '/teams/t1/primaryChannel', ['id' => 'c-general']);
+        $this->mock(self::BASE . '/teams/t1/channels', ['value' => [
+            ['id' => 'c-general', 'displayName' => 'Algemeen'],
+            ['id' => 'c-kasco', 'displayName' => 'KasCo'],
+        ]]);
+        $this->mock(self::BASE . '/teams/t2/primaryChannel', ['error' => ['message' => 'Forbidden']], 403);
+        $this->mock(self::BASE . '/teams/t2/channels', ['error' => ['message' => 'Forbidden']], 403);
+
+        $channels = (new TeamsService($this->graph()))->channelsOfTeams(['t1', 't2']);
+
+        $this->assertSame(['KasCo'], array_column($channels, 'name'));
+        $this->assertSame('c-kasco', $channels[0]['channelId']);
+    }
+
     public function testChannelsFallBackToGeneralNameWithoutPrimary(): void
     {
         $this->mock(self::BASE . '/me/joinedTeams', ['value' => [['id' => 't1', 'displayName' => 'Astatine']]]);

@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Test\TestCase\Controller;
 
+use App\Controller\CommitteesController;
 use Cake\Core\Configure;
 use Cake\Http\Client;
 use Cake\Http\Client\Response;
@@ -23,6 +24,7 @@ class CommitteesControllerTest extends TestCase
             'redirectUri' => 'https://example.test/callback',
         ]);
         Configure::write('Portal.requestAccessWebhookUrl', null);
+        Configure::write('Portal.requestAccessTeamIds', []);
         Client::clearMockResponses();
         $this->enableCsrfToken();
     }
@@ -38,6 +40,7 @@ class CommitteesControllerTest extends TestCase
     private function enableWebhook(int $status = 202, ?callable $match = null): void
     {
         Configure::write('Portal.requestAccessWebhookUrl', self::HOOK);
+        Configure::write('Portal.requestAccessTeamIds', ['t1']);
         (new Client())->addMockResponse('POST', self::HOOK, new Response(["HTTP/1.1 {$status} X"], ''), $match ? ['match' => $match] : []);
     }
 
@@ -50,7 +53,15 @@ class CommitteesControllerTest extends TestCase
             static fn(string $name): array => ['teamId' => 't1', 'teamName' => 'Astatine', 'channelId' => "c-{$name}", 'name' => $name],
             $channelNames,
         );
-        $this->session(['Auth' => ['token' => 't', 'expires' => time() + $expiresIn, 'name' => 'Sam', 'email' => 'sam@utwente.nl', 'channels' => $channels], ...$extra]);
+        $requestable = [
+            ['teamId' => 't1', 'teamName' => '', 'channelId' => 'c-KasCo', 'name' => 'KasCo'],
+            ['teamId' => 't1', 'teamName' => '', 'channelId' => 'c-ATAC', 'name' => 'ATAC'],
+        ];
+        $this->session([
+            'Auth' => ['token' => 't', 'expires' => time() + $expiresIn, 'name' => 'Sam', 'email' => 'sam@utwente.nl', 'channels' => $channels],
+            'Cache' => [md5(CommitteesController::REQUESTABLE_CACHE_KEY) => $requestable],
+            ...$extra,
+        ]);
     }
 
     public function testAnonymousSeesLanding(): void
@@ -113,7 +124,7 @@ class CommitteesControllerTest extends TestCase
             return true;
         });
         $this->signIn();
-        $this->post('/request-access', ['committee' => 'ATAC', 'note' => 'Hi', 'name' => 'Mallory']);
+        $this->post('/request-access', ['committee' => 'c-ATAC', 'note' => 'Hi', 'name' => 'Mallory']);
 
         $this->assertRedirect('/');
         $this->assertFlashMessage('Request sent to the board.');
@@ -122,21 +133,42 @@ class CommitteesControllerTest extends TestCase
         $this->assertStringNotContainsString('Mallory', $body);
     }
 
-    public function testRequestAccessRequiresCommittee(): void
+    public function testFormListsOnlyChannelsTheUserIsNotIn(): void
     {
         $this->enableWebhook();
         $this->signIn();
-        $this->post('/request-access', ['committee' => '  ', 'note' => '']);
+        $this->get('/request-access');
 
         $this->assertResponseOk();
-        $this->assertResponseContains('Please enter the committee');
+        $this->assertResponseContains('<option value="c-ATAC">ATAC</option>');
+        $this->assertResponseNotContains('<option value="c-KasCo">');
+    }
+
+    public function testRequestAccessRejectsChannelNotInList(): void
+    {
+        $this->enableWebhook();
+        $this->signIn();
+        $this->post('/request-access', ['committee' => 'c-KasCo']);
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('Please select a committee');
+    }
+
+    public function testRequestAccessRejectsFreeText(): void
+    {
+        $this->enableWebhook();
+        $this->signIn();
+        $this->post('/request-access', ['committee' => 'Whatever', 'note' => '']);
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('Please select a committee');
     }
 
     public function testRequestAccessIsRateLimitedPerCommittee(): void
     {
         $this->enableWebhook();
-        $this->signIn(extra: ['AccessRequests' => [md5('atac') => time()]]);
-        $this->post('/request-access', ['committee' => 'ATAC']);
+        $this->signIn(extra: ['AccessRequests' => [md5('c-ATAC') => time()]]);
+        $this->post('/request-access', ['committee' => 'c-ATAC']);
 
         $this->assertResponseOk();
         $this->assertResponseContains('already requested');
@@ -146,7 +178,7 @@ class CommitteesControllerTest extends TestCase
     {
         $this->enableWebhook(500);
         $this->signIn();
-        $this->post('/request-access', ['committee' => 'ATAC']);
+        $this->post('/request-access', ['committee' => 'c-ATAC']);
 
         $this->assertResponseOk();
         $this->assertResponseContains('could not be sent');

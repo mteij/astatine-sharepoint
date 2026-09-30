@@ -8,4 +8,7 @@ logs
 tests
 config/.env
 config/app_local.php
+.env.docker
+.env.docker.example
+docker-compose.yml
 *.md

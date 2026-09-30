@@ -110,9 +110,10 @@ h2 { font-size: 1.6rem; }
 .message.success { color: #1a7f37; }
 
 /* Request access form */
-.stack { display: grid; gap: 1rem; max-width: 34rem; }
-.stack .input { display: grid; gap: .3rem; }
-.stack input, .stack textarea { font: inherit; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: 6px; width: 100%; box-sizing: border-box; }
+.stack { display: grid; gap: 1rem; width: 100%; }
+.stack .input { display: grid; gap: .3rem; width: 100%; }
+.stack input, .stack select, .stack textarea { font: inherit; padding: .55rem .7rem; border: 1px solid var(--line); border-radius: 6px; background: #fff; width: 100%; max-width: none; box-sizing: border-box; }
+.stack .actions { display: flex; gap: .75rem; align-items: center; }
 
 @media (max-width: 40rem) {
     .top { height: 7rem; padding: 3rem 1rem 0; }

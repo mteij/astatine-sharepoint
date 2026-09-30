@@ -1,0 +1,13 @@
+services:
+  portal:
+    image: ghcr.io/mteij/astatine-sharepoint:latest
+    build: .
+    env_file: .env.docker
+    ports:
+      - "8080:80"
+    volumes:
+      - portal-logs:/var/www/html/logs
+    restart: unless-stopped
+
+volumes:
+  portal-logs:

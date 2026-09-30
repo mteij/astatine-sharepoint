@@ -438,6 +438,8 @@ return [
         'requestAccessUrl' => env('REQUEST_ACCESS_URL', 'mailto:board@astatine.utwente.nl'),
         // Teams Workflows webhook of the board channel; when unset, requests fall back to requestAccessUrl.
         'requestAccessWebhookUrl' => env('REQUEST_ACCESS_WEBHOOK_URL'),
+        // Comma-separated Teams team IDs whose channels can be requested.
+        'requestAccessTeamIds' => array_values(array_filter(array_map('trim', explode(',', (string)env('REQUEST_ACCESS_TEAM_IDS', ''))))),
         'webappsUrl' => env('WEBAPPS_URL', 'https://webapps.astatine.utwente.nl'),
     ],
 
