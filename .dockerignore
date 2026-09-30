@@ -1,0 +1,11 @@
+.git
+.github
+.dockerignore
+Dockerfile
+vendor
+tmp
+logs
+tests
+config/.env
+config/app_local.php
+*.md
