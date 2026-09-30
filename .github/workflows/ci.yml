@@ -18,7 +18,8 @@ jobs:
           php-version: '8.2'
           extensions: intl
           coverage: none
-      - run: composer install --no-interaction --prefer-dist --no-scripts
+      # Scripts stay enabled: they create config/app_local.php (incl. the test database config).
+      - run: composer install --no-interaction --prefer-dist
       - run: vendor/bin/phpunit --no-coverage
         env:
           APP_FULL_BASE_URL: http://localhost
