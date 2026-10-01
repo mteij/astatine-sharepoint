@@ -18,6 +18,7 @@ namespace App\Test\TestCase;
 
 use App\Application;
 use App\Middleware\HostHeaderMiddleware;
+use App\Middleware\SecurityHeadersMiddleware;
 use Cake\Core\Configure;
 use Cake\Error\Middleware\ErrorHandlerMiddleware;
 use Cake\Http\MiddlewareQueue;
@@ -79,10 +80,12 @@ class ApplicationTest extends TestCase
 
         $this->assertInstanceOf(ErrorHandlerMiddleware::class, $middleware->current());
         $middleware->seek(1);
-        $this->assertInstanceOf(HostHeaderMiddleware::class, $middleware->current());
+        $this->assertInstanceOf(SecurityHeadersMiddleware::class, $middleware->current());
         $middleware->seek(2);
-        $this->assertInstanceOf(AssetMiddleware::class, $middleware->current());
+        $this->assertInstanceOf(HostHeaderMiddleware::class, $middleware->current());
         $middleware->seek(3);
+        $this->assertInstanceOf(AssetMiddleware::class, $middleware->current());
+        $middleware->seek(4);
         $this->assertInstanceOf(RoutingMiddleware::class, $middleware->current());
     }
 }

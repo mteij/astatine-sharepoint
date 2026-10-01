@@ -24,11 +24,21 @@ final class GraphClient
 
     /**
      * @param array<string, mixed> $query
+     * @param array<string, string> $headers Extra request headers.
      * @return array<string, mixed>
      */
-    public function get(string $path, array $query = []): array
+    public function get(string $path, array $query = [], array $headers = []): array
     {
-        return $this->request(self::BASE_URL . $path, $query);
+        return $this->request(self::BASE_URL . $path, $query, null, $headers);
+    }
+
+    /**
+     * @param array<string, mixed> $json
+     * @return array<string, mixed>
+     */
+    public function post(string $path, array $json): array
+    {
+        return $this->request(self::BASE_URL . $path, [], $json);
     }
 
     /**
@@ -56,19 +66,22 @@ final class GraphClient
 
     /**
      * @param array<string, mixed> $query
+     * @param array<string, string> $headers
      * @return array<string, mixed>
      */
-    private function request(string $url, array $query): array
+    private function request(string $url, array $query, ?array $json = null, array $headers = []): array
     {
+        $options = ['headers' => $headers + ['Authorization' => 'Bearer ' . $this->accessToken]];
+        $method = $json === null ? 'GET' : 'POST';
         $started = hrtime(true);
         try {
-            $response = $this->http->get($url, $query, [
-                'headers' => ['Authorization' => 'Bearer ' . $this->accessToken],
-            ]);
+            $response = $json === null
+                ? $this->http->get($url, $query, $options)
+                : $this->http->post($url, json_encode($json, JSON_THROW_ON_ERROR), $options + ['type' => 'json']);
         } catch (ClientExceptionInterface $e) {
             throw new GraphException('Graph request failed: ' . $e->getMessage(), 0);
         } finally {
-            Log::debug(sprintf('Graph GET %s took %d ms', strtok($url, '?'), (hrtime(true) - $started) / 1e6));
+            Log::debug(sprintf('Graph %s %s took %d ms', $method, strtok($url, '?'), (hrtime(true) - $started) / 1e6));
         }
 
         $body = (array)$response->getJson();

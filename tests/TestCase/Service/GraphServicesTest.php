@@ -123,6 +123,47 @@ class GraphServicesTest extends TestCase
         $this->assertSame('Astatine', $channels[0]['teamName']);
     }
 
+    public function testPostSendsJsonBodyAndReturnsResponse(): void
+    {
+        $body = null;
+        $this->http->addMockResponse(
+            'POST',
+            self::BASE . '/things',
+            new Response(['HTTP/1.1 201 Created', 'Content-Type: application/json'], json_encode(['id' => '7'])),
+            ['match' => static function ($request) use (&$body): bool {
+                $body = (string)$request->getBody();
+
+                return $request->getHeaderLine('Authorization') === 'Bearer token';
+            }],
+        );
+
+        $this->assertSame(['id' => '7'], $this->graph()->post('/things', ['fields' => ['Title' => 'ATAC']]));
+        $this->assertSame('{"fields":{"Title":"ATAC"}}', $body);
+    }
+
+    public function testPostErrorBecomesException(): void
+    {
+        $this->http->addMockResponse(
+            'POST',
+            self::BASE . '/things',
+            new Response(['HTTP/1.1 403 Forbidden', 'Content-Type: application/json'], json_encode(['error' => ['message' => 'Denied']])),
+        );
+
+        try {
+            $this->graph()->post('/things', []);
+            $this->fail('Expected GraphException');
+        } catch (GraphException $e) {
+            $this->assertSame(403, $e->status());
+        }
+    }
+
+    public function testJoinedTeamIdsListsTheUsersTeams(): void
+    {
+        $this->mock(self::BASE . '/me/joinedTeams', ['value' => [['id' => 't1'], ['id' => 't2']]]);
+
+        $this->assertSame(['t1', 't2'], (new TeamsService($this->graph()))->joinedTeamIds());
+    }
+
     public function testChannelsOfTeamsListsEveryChannelExceptGeneral(): void
     {
         $this->mock(self::BASE . '/teams/t1/primaryChannel', ['id' => 'c-general']);

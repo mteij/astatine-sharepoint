@@ -22,6 +22,11 @@ final class GraphException extends RuntimeException
         return $this->status === 401;
     }
 
+    public function isForbidden(): bool
+    {
+        return $this->status === 403;
+    }
+
     public function isNotFound(): bool
     {
         return $this->status === 404;

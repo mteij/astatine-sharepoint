@@ -17,6 +17,12 @@ declare(strict_types=1);
 namespace App;
 
 use App\Middleware\HostHeaderMiddleware;
+use App\Middleware\SecurityHeadersMiddleware;
+use App\Service\AccessRequestRepository;
+use App\Service\ChannelSource;
+use App\Service\EntraAuth;
+use App\Service\GraphClient;
+use App\Service\SharePointAccessRequests;
 use Cake\Core\Configure;
 use Cake\Core\ContainerInterface;
 use Cake\Datasource\FactoryLocator;
@@ -70,6 +76,9 @@ class Application extends BaseApplication
             // and make an error page/response
             ->add(new ErrorHandlerMiddleware(Configure::read('Error'), $this))
 
+            // Security headers and no-store caching on every response, error pages included.
+            ->add(new SecurityHeadersMiddleware())
+
             // Validate Host header to prevent Host Header Injection attacks.
             // In production, ensures App.fullBaseUrl is configured and validates
             // the incoming Host header against it.
@@ -95,6 +104,8 @@ class Application extends BaseApplication
             // https://book.cakephp.org/5/en/security/csrf.html#cross-site-request-forgery-csrf-middleware
             ->add(new CsrfProtectionMiddleware([
                 'httponly' => true,
+                'secure' => (bool)(Configure::read('Session.ini')['session.cookie_secure'] ?? true),
+                'samesite' => 'Lax',
             ]));
 
         return $middlewareQueue;
@@ -109,6 +120,12 @@ class Application extends BaseApplication
      */
     public function services(ContainerInterface $container): void
     {
+        $container->add(AccessRequestRepository::class, static fn (): AccessRequestRepository => new SharePointAccessRequests(
+            static fn (): GraphClient => new GraphClient((new EntraAuth())->appAccessToken()),
+            (string)Configure::read('Portal.requestAccessSite'),
+            (string)Configure::read('Portal.requestAccessList'),
+        ));
+        $container->add(ChannelSource::class);
         // Allow your Tables to be dependency injected
         //$container->delegate(new \Cake\ORM\Locator\TableContainer());
     }

@@ -418,6 +418,8 @@ return [
      */
     'Session' => [
         'defaults' => 'php',
+        // Minutes of inactivity before a session is discarded (the Graph token lasts about an hour).
+        'timeout' => 60,
         'ini' => [
             'session.cookie_secure' => filter_var(env('SESSION_COOKIE_SECURE', true), FILTER_VALIDATE_BOOLEAN),
             'session.cookie_samesite' => 'Lax',
@@ -436,8 +438,13 @@ return [
 
     'Portal' => [
         'requestAccessUrl' => env('REQUEST_ACCESS_URL', 'mailto:board@astatine.utwente.nl'),
-        // Teams Workflows webhook of the board channel; when unset, requests fall back to requestAccessUrl.
-        'requestAccessWebhookUrl' => env('REQUEST_ACCESS_WEBHOOK_URL'),
+        // SharePoint site and list that receive access requests; when the site is unset, the form is off
+        // and "Request access" falls back to requestAccessUrl.
+        'requestAccessSite' => env('REQUEST_ACCESS_SITE'),
+        'requestAccessList' => env('REQUEST_ACCESS_LIST', 'Committee Requests'),
+        // Comma-separated channel IDs that may be requested. Anything not listed is never offered or
+        // accepted; when empty, no channel can be requested.
+        'requestAccessChannelIds' => array_values(array_filter(array_map('trim', explode(',', (string)env('REQUEST_ACCESS_CHANNEL_IDS', ''))))),
         // Comma-separated Teams team IDs whose channels can be requested.
         'requestAccessTeamIds' => array_values(array_filter(array_map('trim', explode(',', (string)env('REQUEST_ACCESS_TEAM_IDS', ''))))),
         'webappsUrl' => env('WEBAPPS_URL', 'https://webapps.astatine.utwente.nl'),

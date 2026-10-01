@@ -42,6 +42,17 @@ final class TeamsService
     }
 
     /**
+     * @return list<string> Ids of the teams the signed-in user belongs to.
+     */
+    public function joinedTeamIds(): array
+    {
+        return array_map(
+            static fn (array $team): string => (string)$team['id'],
+            $this->graph->getAll('/me/joinedTeams', ['$select' => 'id']),
+        );
+    }
+
+    /**
      * Channels of the given teams regardless of membership; meant for an
      * app-only token. Unreadable teams are skipped.
      *
@@ -95,7 +106,7 @@ final class TeamsService
         $base = '/teams/' . rawurlencode($teamId);
         $primaryId = $this->primaryChannelId($base);
         $channels = [];
-        foreach ($this->graph->getAll($base . '/channels', ['$select' => 'id,displayName']) as $channel) {
+        foreach ($this->graph->getAll($base . '/channels', ['$select' => 'id,displayName,membershipType']) as $channel) {
             $isGeneral = $primaryId !== null
                 ? $channel['id'] === $primaryId
                 : $channel['displayName'] === self::GENERAL_NAME;
@@ -105,6 +116,7 @@ final class TeamsService
                     'teamName' => $teamName,
                     'channelId' => (string)$channel['id'],
                     'name' => (string)$channel['displayName'],
+                    'private' => ($channel['membershipType'] ?? '') === 'private',
                 ];
             }
         }

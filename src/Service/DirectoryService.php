@@ -13,13 +13,14 @@ final class DirectoryService
     }
 
     /**
-     * @return array{name: string, email: string}
+     * @return array{id: string, name: string, email: string}
      */
     public function profile(): array
     {
-        $me = $this->graph->get('/me', ['$select' => 'displayName,mail,userPrincipalName']);
+        $me = $this->graph->get('/me', ['$select' => 'id,displayName,mail,userPrincipalName']);
 
         return [
+            'id' => (string)($me['id'] ?? ''),
             'name' => (string)($me['displayName'] ?? ''),
             'email' => (string)($me['mail'] ?? $me['userPrincipalName'] ?? ''),
         ];

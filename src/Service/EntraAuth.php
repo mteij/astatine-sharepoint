@@ -30,7 +30,8 @@ final class EntraAuth
      */
     public function authorizationRequest(): array
     {
-        $url = $this->provider->getAuthorizationUrl(['scope' => self::SCOPES]);
+        // Always show Microsoft's account picker instead of silently reusing the browser's session.
+        $url = $this->provider->getAuthorizationUrl(['scope' => self::SCOPES, 'prompt' => 'select_account']);
 
         return [
             'url' => $url,

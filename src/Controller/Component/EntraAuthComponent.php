@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 namespace App\Controller\Component;
 
+use App\Service\ChannelAccessFilter;
 use App\Service\ChannelCatalog;
+use App\Service\ChannelSource;
 use App\Service\DirectoryService;
 use App\Service\EntraAuth;
 use App\Service\GraphClient;
 use App\Service\GraphException;
+use App\Service\ParallelFolderProbe;
 use App\Service\TeamsService;
 use Cake\Controller\Component;
 use Cake\Http\Response;
@@ -24,6 +27,7 @@ class EntraAuthComponent extends Component
 {
     private const AUTH_KEY = 'Auth';
     private const FLOW_KEY = 'OAuthFlow';
+    private const ACCESS_KEY = 'Auth.access';
 
     public function startLogin(): Response
     {
@@ -54,12 +58,15 @@ class EntraAuthComponent extends Component
             $token = (new EntraAuth())->exchange($code, (string)$flow['pkce']);
             $graph = new GraphClient($token->getToken());
             $profile = (new DirectoryService($graph))->profile();
+            [$channels, $access] = $this->accessFilter($token->getToken())->filter((new TeamsService($graph))->channels(), [], time());
             $auth = [
                 'token' => $token->getToken(),
                 'expires' => $token->getExpires(),
                 'name' => $profile['name'],
                 'email' => $profile['email'],
-                'channels' => (new TeamsService($graph))->channels(),
+                'userId' => $profile['id'],
+                'channels' => $channels,
+                'access' => $access,
             ];
         } catch (IdentityProviderException | GraphException | ClientExceptionInterface | UnexpectedValueException $e) {
             Log::error('Entra sign-in failed: ' . $e->getMessage());
@@ -68,6 +75,7 @@ class EntraAuthComponent extends Component
         }
 
         $this->session()->renew();
+        $this->session()->delete('Cache');
         $this->session()->write(self::AUTH_KEY, $auth);
 
         return true;
@@ -82,24 +90,92 @@ class EntraAuthComponent extends Component
     }
 
     /**
-     * Drops only the credentials, e.g. after Graph rejects an expired token.
+     * Ends the session after Graph rejects the token, so nothing of it stays on disk.
      */
     public function expire(): void
     {
-        $this->session()->delete(self::AUTH_KEY);
+        $this->session()->destroy();
     }
 
     /**
-     * @return array{name: string, email: string, catalog: \App\Service\ChannelCatalog}|null Null when signed out or the token expired.
+     * @return array{name: string, email: string, userId: string, catalog: \App\Service\ChannelCatalog}|null Null when signed out or the token expired.
      */
     public function user(): ?array
     {
         $auth = $this->session()->read(self::AUTH_KEY);
-        if (!is_array($auth) || ($auth['expires'] ?? 0) <= time()) {
+        if (!is_array($auth)) {
+            return null;
+        }
+        if (($auth['expires'] ?? 0) <= time()) {
+            // Do not leave an expired token, or the previous user's cached lists, in the session file.
+            $this->session()->destroy();
+
             return null;
         }
 
-        return ['name' => $auth['name'], 'email' => (string)($auth['email'] ?? ''), 'catalog' => new ChannelCatalog($auth['channels'])];
+        return ['name' => $auth['name'], 'email' => (string)($auth['email'] ?? ''), 'userId' => (string)($auth['userId'] ?? ''), 'catalog' => new ChannelCatalog($auth['channels'])];
+    }
+
+    /**
+     * Reloads the user's channels so committees joined or left since sign-in show up.
+     * A temporary Graph failure keeps the previous list; returns false when the token was rejected.
+     */
+    public function refreshChannels(ChannelSource $source): bool
+    {
+        try {
+            [$channels, $access] = $this->accessFilter($this->accessToken())->filter(
+                $source->forToken($this->accessToken()),
+                (array)$this->session()->read(self::ACCESS_KEY),
+                time(),
+            );
+        } catch (GraphException $e) {
+            if ($e->isUnauthorized()) {
+                $this->expire();
+
+                return false;
+            }
+            Log::warning('Could not refresh channels: ' . $e->getMessage());
+
+            return true;
+        } catch (ClientExceptionInterface | UnexpectedValueException $e) {
+            Log::warning('Could not refresh channels: ' . $e->getMessage());
+
+            return true;
+        }
+
+        $this->session()->write(self::AUTH_KEY . '.channels', $channels);
+        $this->session()->write(self::ACCESS_KEY, $access);
+
+        return true;
+    }
+
+    /**
+     * Hides a channel Graph refused to open after it was listed (access changed since the last check).
+     */
+    public function markNoAccess(string $channelId): void
+    {
+        $known = $this->accessFilter($this->accessToken())
+            ->refused((array)$this->session()->read(self::ACCESS_KEY), $channelId, time());
+        $this->session()->write(self::ACCESS_KEY, $known);
+
+        $channels = (array)$this->session()->read(self::AUTH_KEY . '.channels');
+        $this->session()->write(
+            self::AUTH_KEY . '.channels',
+            array_values(array_filter($channels, static fn (array $c): bool => $c['channelId'] !== $channelId)),
+        );
+    }
+
+    private function accessFilter(string $accessToken): ChannelAccessFilter
+    {
+        return new ChannelAccessFilter(new ParallelFolderProbe($accessToken));
+    }
+
+    /**
+     * Drops a value stored by remember().
+     */
+    public function forget(string $key): void
+    {
+        $this->session()->delete('Cache.' . md5($key));
     }
 
     /**
