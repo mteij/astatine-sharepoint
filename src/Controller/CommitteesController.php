@@ -46,31 +46,63 @@ class CommitteesController extends AppController
         }
     }
 
-    public function index(ChannelSource $channels): void
+    public function index(): void
     {
         $user = $this->EntraAuth->user();
-        if ($user !== null) {
-            // Membership changes in Teams show up on the next page load, not only after signing in again.
-            $user = $this->EntraAuth->refreshChannels($channels) ? $this->EntraAuth->user() : null;
-            $this->EntraAuth->forget(self::REQUESTABLE_CACHE_KEY);
-        }
         if ($user === null) {
             $this->viewBuilder()->setTemplate('landing');
 
             return;
         }
 
-        $this->set('channels', $user['catalog']->all());
-        $this->set('showTeam', $user['catalog']->spansMultipleTeams());
+        // Shown at once from the session; the page then asks refresh() for the current list.
+        $this->setCommittees($user, $user['loaded'] ? __('You are not in any committee yet.') : __('Loading your committees…'));
         $this->set('requestAccessUrl', $this->requestsEnabled() ? '/request-access' : Configure::read('Portal.requestAccessUrl'));
     }
 
-    public function requestAccess(AccessRequestRepository $requests): ?Response
+    /**
+     * The committee list as an HTML fragment. Membership changes in Teams show up on the next
+     * page load; the Graph calls happen here so the overview itself does not wait for them.
+     */
+    public function refresh(ChannelSource $channels): ?Response
+    {
+        $this->request->allowMethod('get');
+        if (!$this->EntraAuth->refreshChannels($channels)) {
+            return $this->response->withStatus(401);
+        }
+        $this->EntraAuth->forget(self::REQUESTABLE_CACHE_KEY);
+
+        $user = $this->EntraAuth->user();
+        if ($user === null) {
+            return $this->response->withStatus(401);
+        }
+        $this->setCommittees($user, $user['loaded'] ? __('You are not in any committee yet.') : __('Your committees could not be loaded. Reload the page to try again.'));
+        $this->viewBuilder()->setLayout('ajax');
+
+        return null;
+    }
+
+    /**
+     * @param array{catalog: \App\Service\ChannelCatalog} $user
+     */
+    private function setCommittees(array $user, string $emptyMessage): void
+    {
+        $this->set('channels', $user['catalog']->all());
+        $this->set('showTeam', $user['catalog']->spansMultipleTeams());
+        $this->set('emptyMessage', $emptyMessage);
+    }
+
+    public function requestAccess(AccessRequestRepository $requests, ChannelSource $channels): ?Response
     {
         if (!$this->requestsEnabled()) {
             throw new NotFoundException();
         }
         $this->request->allowMethod(['get', 'post']);
+
+        // Straight after sign-in the channel list is not loaded yet; the form needs it to leave out joined channels.
+        if (!$this->EntraAuth->user()['loaded'] && !$this->EntraAuth->refreshChannels($channels)) {
+            return $this->redirect('/login');
+        }
 
         $options = $this->requestableChannels();
         $selected = '';

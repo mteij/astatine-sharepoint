@@ -11,7 +11,6 @@ use App\Service\EntraAuth;
 use App\Service\GraphClient;
 use App\Service\GraphException;
 use App\Service\ParallelFolderProbe;
-use App\Service\TeamsService;
 use Cake\Controller\Component;
 use Cake\Http\Response;
 use Cake\Http\Session;
@@ -58,15 +57,16 @@ class EntraAuthComponent extends Component
             $token = (new EntraAuth())->exchange($code, (string)$flow['pkce']);
             $graph = new GraphClient($token->getToken());
             $profile = (new DirectoryService($graph))->profile();
-            [$channels, $access] = $this->accessFilter($token->getToken())->filter((new TeamsService($graph))->channels(), [], time());
             $auth = [
                 'token' => $token->getToken(),
                 'expires' => $token->getExpires(),
                 'name' => $profile['name'],
                 'email' => $profile['email'],
                 'userId' => $profile['id'],
-                'channels' => $channels,
-                'access' => $access,
+                // Channels are loaded after the page is shown (see CommitteesController::refresh()).
+                'channels' => [],
+                'access' => [],
+                'loaded' => false,
             ];
         } catch (IdentityProviderException | GraphException | ClientExceptionInterface | UnexpectedValueException $e) {
             Log::error('Entra sign-in failed: ' . $e->getMessage());
@@ -98,7 +98,7 @@ class EntraAuthComponent extends Component
     }
 
     /**
-     * @return array{name: string, email: string, userId: string, catalog: \App\Service\ChannelCatalog}|null Null when signed out or the token expired.
+     * @return array{name: string, email: string, userId: string, catalog: \App\Service\ChannelCatalog, loaded: bool}|null Null when signed out or the token expired.
      */
     public function user(): ?array
     {
@@ -113,7 +113,7 @@ class EntraAuthComponent extends Component
             return null;
         }
 
-        return ['name' => $auth['name'], 'email' => (string)($auth['email'] ?? ''), 'userId' => (string)($auth['userId'] ?? ''), 'catalog' => new ChannelCatalog($auth['channels'])];
+        return ['name' => $auth['name'], 'email' => (string)($auth['email'] ?? ''), 'userId' => (string)($auth['userId'] ?? ''), 'catalog' => new ChannelCatalog($auth['channels']), 'loaded' => (bool)($auth['loaded'] ?? false)];
     }
 
     /**
@@ -145,6 +145,7 @@ class EntraAuthComponent extends Component
 
         $this->session()->write(self::AUTH_KEY . '.channels', $channels);
         $this->session()->write(self::ACCESS_KEY, $access);
+        $this->session()->write(self::AUTH_KEY . '.loaded', true);
 
         return true;
     }

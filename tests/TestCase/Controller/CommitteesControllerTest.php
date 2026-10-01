@@ -291,7 +291,7 @@ class CommitteesControllerTest extends TestCase
     public function testDashboardRefreshShowsNewlyJoinedCommittee(): void
     {
         $this->signIn(['KasCo'], refreshedNames: ['KasCo', 'ATAC']);
-        $this->get('/');
+        $this->get('/committees');
 
         $this->assertResponseContains('ATAC');
     }
@@ -299,7 +299,7 @@ class CommitteesControllerTest extends TestCase
     public function testDashboardRefreshDropsLeftCommittee(): void
     {
         $this->signIn(['KasCo', 'ATAC'], refreshedNames: ['KasCo']);
-        $this->get('/');
+        $this->get('/committees');
 
         $this->assertResponseNotContains('ATAC');
     }
@@ -308,7 +308,7 @@ class CommitteesControllerTest extends TestCase
     {
         $this->privateNames = ['KasCo'];
         $this->signIn(['KasCo', 'ATAC'], 600, ['Auth.access' => ['c-KasCo' => ['ok' => false, 'at' => time()]]]);
-        $this->get('/');
+        $this->get('/committees');
 
         $this->assertResponseContains('ATAC');
         $this->assertResponseNotContains('KasCo');
@@ -318,7 +318,7 @@ class CommitteesControllerTest extends TestCase
     {
         $this->privateNames = ['KasCo'];
         $this->signIn(['KasCo'], 600, ['Auth.access' => ['c-KasCo' => ['ok' => true, 'at' => time()]]]);
-        $this->get('/');
+        $this->get('/committees');
 
         $this->assertResponseContains('KasCo');
     }
@@ -326,18 +326,55 @@ class CommitteesControllerTest extends TestCase
     public function testDashboardKeepsKnownCommitteesWhenRefreshFails(): void
     {
         $this->signIn(['KasCo'], refreshFailure: new GraphException('boom', 503));
-        $this->get('/');
+        $this->get('/committees');
 
         $this->assertResponseContains('KasCo');
     }
 
-    public function testDashboardSignsOutWhenGraphRejectsToken(): void
+    public function testRefreshSignsOutWhenGraphRejectsToken(): void
     {
+        $this->signIn(['KasCo'], refreshFailure: new GraphException('expired', 401));
+        $this->get('/committees');
+
+        $this->assertResponseCode(401);
+        $this->assertSession(null, 'Auth');
+    }
+
+    public function testOverviewDoesNotWaitForGraph(): void
+    {
+        // A failing refresh would sign the user out; the overview must not call it at all.
         $this->signIn(['KasCo'], refreshFailure: new GraphException('expired', 401));
         $this->get('/');
 
-        $this->assertResponseContains('Sign in with Microsoft');
-        $this->assertSession(null, 'Auth');
+        $this->assertResponseContains('KasCo');
+        $this->assertResponseContains('id="committees"');
+        $this->assertSession('Sam', 'Auth.name');
+    }
+
+    public function testOverviewShowsLoadingBeforeTheFirstRefresh(): void
+    {
+        $this->signIn([]);
+        $this->get('/');
+
+        $this->assertResponseContains('Loading your committees');
+    }
+
+    public function testRefreshReturnsOnlyTheList(): void
+    {
+        $this->signIn(['KasCo']);
+        $this->get('/committees');
+
+        $this->assertResponseOk();
+        $this->assertResponseContains('KasCo');
+        $this->assertResponseNotContains('<html');
+        $this->assertSession(true, 'Auth.loaded');
+    }
+
+    public function testRefreshRequiresLogin(): void
+    {
+        $this->get('/committees');
+
+        $this->assertRedirect('/login');
     }
 
     public function testExpiredSessionIsTreatedAsAnonymous(): void

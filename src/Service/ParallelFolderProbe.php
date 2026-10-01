@@ -14,7 +14,7 @@ use Cake\Log\Log;
 final class ParallelFolderProbe
 {
     private const BASE_URL = 'https://graph.microsoft.com/v1.0';
-    private const BATCH = 10;
+    private const BATCH = 40;
     private const TIMEOUT = 10;
 
     public function __construct(private readonly string $accessToken)
