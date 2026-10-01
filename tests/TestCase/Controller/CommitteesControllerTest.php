@@ -9,6 +9,8 @@ use App\Service\AccessRequestException;
 use App\Service\AccessRequestRepository;
 use App\Service\ChannelSource;
 use App\Service\GraphException;
+use App\Service\UserChannelCache;
+use Cake\Cache\Cache;
 use Cake\Core\Configure;
 use Exception;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -27,6 +29,7 @@ class CommitteesControllerTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Cache::clear('portal');
         Configure::write('Entra', [
             'clientId' => 'client',
             'clientSecret' => 'secret',
@@ -368,6 +371,16 @@ class CommitteesControllerTest extends TestCase
         $this->assertResponseContains('KasCo');
         $this->assertResponseNotContains('<html');
         $this->assertSession(true, 'Auth.loaded');
+    }
+
+    public function testRefreshRemembersTheListForTheNextSignIn(): void
+    {
+        $this->signIn(['KasCo', 'ATAC']);
+        $this->get('/committees');
+
+        $remembered = (new UserChannelCache())->load('u-sam');
+        $this->assertSame(['KasCo', 'ATAC'], array_column($remembered['channels'] ?? [], 'name'));
+        $this->assertNull((new UserChannelCache())->load('someone-else'));
     }
 
     public function testRefreshRequiresLogin(): void

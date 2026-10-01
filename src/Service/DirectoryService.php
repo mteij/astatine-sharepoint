@@ -8,16 +8,12 @@ namespace App\Service;
  */
 final class DirectoryService
 {
-    public function __construct(private readonly GraphClient $graph)
-    {
-    }
-
     /**
      * @return array{id: string, name: string, email: string}
      */
-    public function profile(): array
+    public function profile(string $accessToken): array
     {
-        $me = $this->graph->get('/me', ['$select' => 'id,displayName,mail,userPrincipalName']);
+        $me = (new GraphClient($accessToken))->get('/me', ['$select' => 'id,displayName,mail,userPrincipalName']);
 
         return [
             'id' => (string)($me['id'] ?? ''),

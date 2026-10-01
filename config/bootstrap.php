@@ -38,13 +38,9 @@ use Cake\Core\Configure\Engine\PhpConfig;
 use Cake\Datasource\ConnectionManager;
 use Cake\Error\ErrorTrap;
 use Cake\Error\ExceptionTrap;
-use Cake\Http\ServerRequest;
 use Cake\Log\Log;
-use Cake\Mailer\Mailer;
-use Cake\Mailer\TransportFactory;
 use Cake\Routing\Router;
 use Cake\Utility\Security;
-use Detection\MobileDetect;
 use josegonzalez\Dotenv\Loader;
 use function Cake\Core\env;
 
@@ -186,26 +182,8 @@ unset($fullBaseUrl);
  */
 Cache::setConfig(Configure::consume('Cache'));
 ConnectionManager::setConfig(Configure::consume('Datasources'));
-TransportFactory::setConfig(Configure::consume('EmailTransport'));
-Mailer::setConfig(Configure::consume('Email'));
 Log::setConfig(Configure::consume('Log'));
 Security::setSalt(Configure::consume('Security.salt'));
-
-/*
- * Setup detectors for mobile and tablet.
- * If you don't use these checks you can safely remove this code
- * and the mobiledetect package from composer.json.
- */
-ServerRequest::addDetector('mobile', function ($request) {
-    $detector = new MobileDetect();
-
-    return $detector->isMobile();
-});
-ServerRequest::addDetector('tablet', function ($request) {
-    $detector = new MobileDetect();
-
-    return $detector->isTablet();
-});
 
 /*
  * You can enable default locale format parsing by adding calls

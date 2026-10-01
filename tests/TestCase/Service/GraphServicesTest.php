@@ -8,6 +8,7 @@ use App\Service\FolderPath;
 use App\Service\GraphClient;
 use App\Service\GraphException;
 use App\Service\TeamsService;
+use Cake\Cache\Cache;
 use Cake\Http\Client;
 use Cake\Http\Client\Response;
 use Cake\TestSuite\TestCase;
@@ -21,6 +22,7 @@ class GraphServicesTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Cache::clear('portal');
         Client::clearMockResponses();
         $this->http = new Client();
     }
@@ -155,6 +157,29 @@ class GraphServicesTest extends TestCase
         } catch (GraphException $e) {
             $this->assertSame(403, $e->status());
         }
+    }
+
+    public function testPrimaryChannelIsLookedUpOncePerTeam(): void
+    {
+        $this->mock(self::BASE . '/me/joinedTeams', ['value' => [['id' => 't1', 'displayName' => 'Astatine']]]);
+        $this->mock(self::BASE . '/teams/t1/primaryChannel', ['id' => 'c-general']);
+        $this->mock(self::BASE . '/teams/t1/channels', ['value' => [
+            ['id' => 'c-general', 'displayName' => 'General'],
+            ['id' => 'c-kasco', 'displayName' => 'KasCo'],
+        ]]);
+        $teams = new TeamsService($this->graph());
+        $teams->channels();
+
+        // Without a primaryChannel answer the second call can only succeed from the cache.
+        Client::clearMockResponses();
+        $this->mock(self::BASE . '/me/joinedTeams', ['value' => [['id' => 't1', 'displayName' => 'Astatine']]]);
+        $this->mock(self::BASE . '/teams/t1/primaryChannel', ['error' => ['message' => 'Throttled']], 429);
+        $this->mock(self::BASE . '/teams/t1/channels', ['value' => [
+            ['id' => 'c-general', 'displayName' => 'Algemeen'],
+            ['id' => 'c-kasco', 'displayName' => 'KasCo'],
+        ]]);
+
+        $this->assertSame(['KasCo'], array_column($teams->channels(), 'name'));
     }
 
     public function testJoinedTeamIdsListsTheUsersTeams(): void

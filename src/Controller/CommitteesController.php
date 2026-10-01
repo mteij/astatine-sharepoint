@@ -8,11 +8,13 @@ use App\Service\AccessRequestException;
 use App\Service\AccessRequestRepository;
 use App\Service\Channel;
 use App\Service\ChannelSource;
+use App\Service\DirectoryService;
 use App\Service\DriveService;
 use App\Service\EntraAuth;
 use App\Service\FolderPath;
 use App\Service\GraphClient;
 use App\Service\GraphException;
+use App\Service\RequestableChannels;
 use App\Service\TeamsService;
 use Cake\Core\Configure;
 use Cake\Event\EventInterface;
@@ -92,7 +94,7 @@ class CommitteesController extends AppController
         $this->set('emptyMessage', $emptyMessage);
     }
 
-    public function requestAccess(AccessRequestRepository $requests, ChannelSource $channels): ?Response
+    public function requestAccess(AccessRequestRepository $requests, ChannelSource $channels, RequestableChannels $requestable): ?Response
     {
         if (!$this->requestsEnabled()) {
             throw new NotFoundException();
@@ -104,7 +106,7 @@ class CommitteesController extends AppController
             return $this->redirect('/login');
         }
 
-        $options = $this->requestableChannels();
+        $options = $this->requestableChannels($requestable);
         $selected = '';
         $note = '';
         if ($this->request->is('post')) {
@@ -129,74 +131,33 @@ class CommitteesController extends AppController
     }
 
     /**
-     * Teams whose channels can be requested: the configured ones, otherwise
-     * every team the signed-in user belongs to.
-     *
-     * @return list<string>
-     */
-    private function requestableTeamIds(): array
-    {
-        $configured = (array)Configure::read('Portal.requestAccessTeamIds');
-        if ($configured !== []) {
-            return array_values($configured);
-        }
-
-        return (new TeamsService(new GraphClient($this->EntraAuth->accessToken())))->joinedTeamIds();
-    }
-
-    /**
-     * Channels that exist in the requestable teams but that the user is not in yet,
-     * keyed by channel id. Listed with an app-only token and kept in the session.
+     * Channels the user may request: allow-listed and not joined yet, keyed by channel id.
+     * The listing is kept in the session; only allow-listed channels are stored there,
+     * so other channel names never reach it.
      *
      * @return array<string, array{teamId: string, channelId: string, name: string}>
      */
-    private function requestableChannels(): array
+    private function requestableChannels(RequestableChannels $requestable): array
     {
-        try {
-            $all = $this->EntraAuth->remember(self::REQUESTABLE_CACHE_KEY, function (): array {
-                $teamIds = $this->requestableTeamIds();
+        $token = $this->EntraAuth->accessToken();
+        $all = $this->EntraAuth->recall(self::REQUESTABLE_CACHE_KEY);
+        if ($all === null) {
+            // Listing the channels takes seconds; do not hold the session file (and block other clicks) meanwhile.
+            $this->EntraAuth->releaseSession();
+            try {
+                $all = $requestable->fetch($token, (new EntraAuth())->appAccessToken());
+            } catch (GraphException | IdentityProviderException | ClientExceptionInterface | UnexpectedValueException | RuntimeException $e) {
+                Log::error('Could not list requestable committees: ' . $e->getMessage());
+                $this->Flash->error(__('The list of committees could not be loaded. Please try again later.'));
 
-                if ($teamIds === []) {
-                    return [];
-                }
-                $channels = (new TeamsService(new GraphClient((new EntraAuth())->appAccessToken())))->channelsOfTeams($teamIds);
-
-                // Only allow-listed channels are stored, so other channel names never reach the session.
-                return $this->allowListed($channels);
-            });
-        } catch (GraphException | IdentityProviderException | ClientExceptionInterface | UnexpectedValueException | RuntimeException $e) {
-            Log::error('Could not list requestable committees: ' . $e->getMessage());
-            $this->Flash->error(__('The list of committees could not be loaded. Please try again later.'));
-
-            return [];
+                return [];
+            }
+            $this->EntraAuth->store(self::REQUESTABLE_CACHE_KEY, $all);
         }
 
         $mine = array_map(static fn (Channel $c): string => $c->channelId, $this->EntraAuth->user()['catalog']->all());
-        $options = [];
-        foreach ($this->allowListed($all) as $channel) {
-            if (!in_array($channel['channelId'], $mine, true)) {
-                $options[$channel['channelId']] = $channel;
-            }
-        }
 
-        return $options;
-    }
-
-    /**
-     * Keeps only channels whose id is on the configured allow-list. An empty list
-     * allows nothing, so a new or renamed confidential channel is never offered.
-     *
-     * @param array<int, array{teamId: string, teamName: string, channelId: string, name: string}> $channels
-     * @return list<array{teamId: string, teamName: string, channelId: string, name: string}>
-     */
-    private function allowListed(array $channels): array
-    {
-        $allowed = (array)Configure::read('Portal.requestAccessChannelIds');
-
-        return array_values(array_filter(
-            $channels,
-            static fn (array $c): bool => in_array($c['channelId'], $allowed, true),
-        ));
+        return $requestable->notJoined($all, $mine);
     }
 
     private function requestsEnabled(): bool
@@ -261,9 +222,9 @@ class CommitteesController extends AppController
         return $this->EntraAuth->startLogin();
     }
 
-    public function callback(): Response
+    public function callback(DirectoryService $directory): Response
     {
-        if (!$this->EntraAuth->completeLogin()) {
+        if (!$this->EntraAuth->completeLogin($directory)) {
             $this->Flash->error(__('Sign-in failed. Please try again.'));
         }
 
@@ -291,22 +252,28 @@ class CommitteesController extends AppController
             throw new NotFoundException();
         }
 
+        // Read the session first, then release it: the Graph calls take a while and must not block other clicks.
         $graph = new GraphClient($this->EntraAuth->accessToken());
+        $cacheKey = "files:{$channel->teamId}:{$channel->channelId}";
+        $folder = $this->EntraAuth->recall($cacheKey);
+        $this->EntraAuth->releaseSession();
+
         $drive = new DriveService($graph);
         $items = [];
         $folderUrl = null;
 
         try {
             // The channel's folder never changes, so it is looked up once per session.
-            $folder = $this->EntraAuth->remember(
-                "files:{$channel->teamId}:{$channel->channelId}",
-                fn(): array => (new TeamsService($graph))->filesFolder($channel->teamId, $channel->channelId),
-            );
+            $fresh = $folder === null;
+            $folder ??= (new TeamsService($graph))->filesFolder($channel->teamId, $channel->channelId);
             $items = $drive->list($folder['driveId'], $folder['itemId'], $path);
             $folderUrl = $folder['webUrl'] !== '' ? $path->urlUnder($folder['webUrl']) : null;
+            if ($fresh) {
+                $this->EntraAuth->store($cacheKey, $folder);
+            }
         } catch (GraphException $e) {
             if ($e->isUnauthorized()) {
-                $this->EntraAuth->expire();
+                $this->EntraAuth->logout();
 
                 return $this->redirect('/login');
             }

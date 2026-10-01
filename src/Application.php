@@ -20,8 +20,10 @@ use App\Middleware\HostHeaderMiddleware;
 use App\Middleware\SecurityHeadersMiddleware;
 use App\Service\AccessRequestRepository;
 use App\Service\ChannelSource;
+use App\Service\DirectoryService;
 use App\Service\EntraAuth;
 use App\Service\GraphClient;
+use App\Service\RequestableChannels;
 use App\Service\SharePointAccessRequests;
 use Cake\Core\Configure;
 use Cake\Core\ContainerInterface;
@@ -126,6 +128,11 @@ class Application extends BaseApplication
             (string)Configure::read('Portal.requestAccessList'),
         ));
         $container->add(ChannelSource::class);
+        $container->add(DirectoryService::class);
+        $container->add(RequestableChannels::class, static fn (): RequestableChannels => new RequestableChannels(
+            array_values((array)Configure::read('Portal.requestAccessChannelIds')),
+            array_values((array)Configure::read('Portal.requestAccessTeamIds')),
+        ));
         // Allow your Tables to be dependency injected
         //$container->delegate(new \Cake\ORM\Locator\TableContainer());
     }

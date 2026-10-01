@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Service;
 
+use Cake\Cache\Cache;
 use Cake\Log\Log;
 
 /**
@@ -126,8 +127,15 @@ final class TeamsService
 
     private function primaryChannelId(string $teamBase): ?string
     {
+        // A team's primary channel never changes, so one lookup serves every user for a day.
+        $key = 'primary_' . hash('sha256', $teamBase);
+        $cached = Cache::read($key, 'portal');
+        if (is_string($cached) && $cached !== '') {
+            return $cached;
+        }
+
         try {
-            return $this->graph->get($teamBase . '/primaryChannel', ['$select' => 'id'])['id'] ?? null;
+            $id = $this->graph->get($teamBase . '/primaryChannel', ['$select' => 'id'])['id'] ?? null;
         } catch (GraphException $e) {
             if ($e->isUnauthorized()) {
                 throw $e;
@@ -135,5 +143,10 @@ final class TeamsService
 
             return null;
         }
+        if (is_string($id) && $id !== '') {
+            Cache::write($key, $id, 'portal');
+        }
+
+        return $id;
     }
 }

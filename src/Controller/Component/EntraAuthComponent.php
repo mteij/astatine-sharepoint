@@ -8,9 +8,9 @@ use App\Service\ChannelCatalog;
 use App\Service\ChannelSource;
 use App\Service\DirectoryService;
 use App\Service\EntraAuth;
-use App\Service\GraphClient;
 use App\Service\GraphException;
 use App\Service\ParallelFolderProbe;
+use App\Service\UserChannelCache;
 use Cake\Controller\Component;
 use Cake\Http\Response;
 use Cake\Http\Session;
@@ -39,7 +39,7 @@ class EntraAuthComponent extends Component
     /**
      * Completes the OAuth callback; returns false on any failure.
      */
-    public function completeLogin(): bool
+    public function completeLogin(DirectoryService $directory): bool
     {
         $query = $this->getController()->getRequest()->getQueryParams();
         $flow = $this->session()->consume(self::FLOW_KEY);
@@ -55,18 +55,18 @@ class EntraAuthComponent extends Component
 
         try {
             $token = (new EntraAuth())->exchange($code, (string)$flow['pkce']);
-            $graph = new GraphClient($token->getToken());
-            $profile = (new DirectoryService($graph))->profile();
+            $profile = $directory->profile($token->getToken());
+            // A returning user sees the last known list at once; refresh() replaces it in the background.
+            $remembered = (new UserChannelCache())->load($profile['id']);
             $auth = [
                 'token' => $token->getToken(),
                 'expires' => $token->getExpires(),
                 'name' => $profile['name'],
                 'email' => $profile['email'],
                 'userId' => $profile['id'],
-                // Channels are loaded after the page is shown (see CommitteesController::refresh()).
-                'channels' => [],
-                'access' => [],
-                'loaded' => false,
+                'channels' => $remembered['channels'] ?? [],
+                'access' => $remembered['access'] ?? [],
+                'loaded' => $remembered !== null,
             ];
         } catch (IdentityProviderException | GraphException | ClientExceptionInterface | UnexpectedValueException $e) {
             Log::error('Entra sign-in failed: ' . $e->getMessage());
@@ -82,17 +82,9 @@ class EntraAuthComponent extends Component
     }
 
     /**
-     * Ends the whole session (explicit sign-out).
+     * Ends the whole session: explicit sign-out, or Graph rejected the token and nothing of it should stay on disk.
      */
     public function logout(): void
-    {
-        $this->session()->destroy();
-    }
-
-    /**
-     * Ends the session after Graph rejects the token, so nothing of it stays on disk.
-     */
-    public function expire(): void
     {
         $this->session()->destroy();
     }
@@ -122,15 +114,19 @@ class EntraAuthComponent extends Component
      */
     public function refreshChannels(ChannelSource $source): bool
     {
+        $auth = (array)$this->session()->read(self::AUTH_KEY);
+        $token = (string)($auth['token'] ?? '');
+        $userId = (string)($auth['userId'] ?? '');
+        $known = (array)($auth['access'] ?? []);
+
+        // The Graph calls below take seconds; do not hold the session file (and block every other request) meanwhile.
+        $this->releaseSession();
+
         try {
-            [$channels, $access] = $this->accessFilter($this->accessToken())->filter(
-                $source->forToken($this->accessToken()),
-                (array)$this->session()->read(self::ACCESS_KEY),
-                time(),
-            );
+            [$channels, $access] = $this->accessFilter($token)->filter($source->forToken($token), $known, time());
         } catch (GraphException $e) {
             if ($e->isUnauthorized()) {
-                $this->expire();
+                $this->logout();
 
                 return false;
             }
@@ -143,9 +139,14 @@ class EntraAuthComponent extends Component
             return true;
         }
 
-        $this->session()->write(self::AUTH_KEY . '.channels', $channels);
-        $this->session()->write(self::ACCESS_KEY, $access);
-        $this->session()->write(self::AUTH_KEY . '.loaded', true);
+        $this->session()->write([
+            self::AUTH_KEY . '.channels' => $channels,
+            self::ACCESS_KEY => $access,
+            self::AUTH_KEY . '.loaded' => true,
+        ]);
+        if ($userId !== '') {
+            (new UserChannelCache())->save($userId, $channels, $access);
+        }
 
         return true;
     }
@@ -187,16 +188,45 @@ class EntraAuthComponent extends Component
      */
     public function remember(string $key, callable $load): array
     {
-        $path = 'Cache.' . md5($key);
-        $cached = $this->session()->read($path);
-        if (is_array($cached)) {
+        $cached = $this->recall($key);
+        if ($cached !== null) {
             return $cached;
         }
 
         $value = $load();
-        $this->session()->write($path, $value);
+        $this->store($key, $value);
 
         return $value;
+    }
+
+    /**
+     * @return array<string, mixed>|null The value stored under the key, or null.
+     */
+    public function recall(string $key): ?array
+    {
+        $cached = $this->session()->read('Cache.' . md5($key));
+
+        return is_array($cached) ? $cached : null;
+    }
+
+    /**
+     * @param array<string, mixed> $value
+     */
+    public function store(string $key, array $value): void
+    {
+        $this->session()->write('Cache.' . md5($key), $value);
+    }
+
+    /**
+     * Lets other requests of this user run while this one waits on Graph. PHP keeps the session file locked
+     * until the request ends, so a long call would otherwise freeze every click in the meantime. Read what
+     * you need first: any later session access (reads and writes) reopens the session.
+     */
+    public function releaseSession(): void
+    {
+        if (PHP_SAPI !== 'cli' && PHP_SAPI !== 'phpdbg') {
+            $this->session()->close();
+        }
     }
 
     public function accessToken(): string

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "327b28b49b483c5c3d4a6236fc8ac4f2",
+    "content-hash": "24e96c03fd56aae75df167e44c51d565",
     "packages": [
         {
             "name": "cakephp/cakephp",
@@ -1004,70 +1004,6 @@
                 "source": "https://github.com/thephpleague/oauth2-client/tree/2.9.1"
             },
             "time": "2026-09-16T13:14:31+00:00"
-        },
-        {
-            "name": "mobiledetect/mobiledetectlib",
-            "version": "4.11.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/serbanghita/Mobile-Detect.git",
-                "reference": "ab39168b7556f44c11c80be1222b44b239f5c2e4"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/serbanghita/Mobile-Detect/zipball/ab39168b7556f44c11c80be1222b44b239f5c2e4",
-                "reference": "ab39168b7556f44c11c80be1222b44b239f5c2e4",
-                "shasum": ""
-            },
-            "require": {
-                "php": ">=8.2",
-                "psr/simple-cache": "^1.0 || ^2.0 || ^3.0"
-            },
-            "require-dev": {
-                "friendsofphp/php-cs-fixer": "3.95.1",
-                "phpbench/phpbench": "1.6.1",
-                "phpstan/phpstan": "2.1.47",
-                "phpunit/phpunit": "9.6.34",
-                "squizlabs/php_codesniffer": "3.13.5"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Detection\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Serban Ghita",
-                    "email": "serbanghita@gmail.com",
-                    "homepage": "http://mobiledetect.net",
-                    "role": "Developer"
-                }
-            ],
-            "description": "Mobile_Detect is a lightweight PHP class for detecting mobile devices. It uses the User-Agent string combined with specific HTTP headers to detect the mobile environment.",
-            "homepage": "https://github.com/serbanghita/Mobile-Detect",
-            "keywords": [
-                "detect mobile devices",
-                "mobile",
-                "mobile detect",
-                "mobile detector",
-                "php mobile detect"
-            ],
-            "support": {
-                "issues": "https://github.com/serbanghita/Mobile-Detect/issues",
-                "source": "https://github.com/serbanghita/Mobile-Detect/tree/4.11.0"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/serbanghita",
-                    "type": "github"
-                }
-            ],
-            "time": "2026-05-24T12:32:40+00:00"
         },
         {
             "name": "psr/clock",

@@ -15,6 +15,7 @@ declare(strict_types=1);
  * @license   https://opensource.org/licenses/mit-license.php MIT License
  */
 
+use Cake\Cache\Cache;
 use Cake\Chronos\Chronos;
 use Cake\Core\Configure;
 use Cake\TestSuite\ConnectionHelper;
@@ -35,6 +36,9 @@ if (empty($_SERVER['HTTP_HOST']) && !Configure::read('App.fullBaseUrl')) {
 }
 
 // Fixate now to avoid one-second-leap-issues
+Cache::drop('portal');
+Cache::setConfig('portal', ['className' => 'Array', 'duration' => '+1 days']);
+
 Chronos::setTestNow(Chronos::now());
 
 // Fixate sessionid early on, as php7.2+

@@ -23,7 +23,7 @@ final class SharePointAccessRequests implements AccessRequestRepository
     private const STATUS_DENIED = 'Denied';
     private const DENIED_RETRY_DAYS = 7;
     // The approval flow cannot wait longer than 30 days; a Pending item past that will never be answered.
-    private const PENDING_MAX_AGE_DAYS = 35;
+    private const PENDING_MAX_AGE_DAYS = 28;
     private const LOOKUP_LIMIT = 100;
 
     /**

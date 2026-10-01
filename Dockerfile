@@ -16,7 +16,7 @@ RUN composer install --no-dev --no-scripts --no-autoloader --no-interaction --pr
 
 COPY . .
 RUN composer dump-autoload --no-dev --optimize --classmap-authoritative --no-interaction \
-    && mkdir -p tmp/cache/models tmp/cache/persistent tmp/cache/views tmp/sessions logs \
+    && mkdir -p tmp/cache/models tmp/cache/persistent tmp/cache/portal tmp/cache/views tmp/sessions logs \
     && chown -R www-data:www-data tmp logs
 
 COPY docker/vhost.conf /etc/apache2/sites-available/000-default.conf
